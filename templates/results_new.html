@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Analysis Results</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+  </head>
+  <body class="bg-light">
+    <div class="container py-4">
+      <a class="btn btn-link" href="{{ url_for('index') }}">← Upload another file</a>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="card-title">Preview</h2>
+          <div class="table-responsive">
+            {{ head_html | safe }}
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="card-title">Summary Statistics</h2>
+          <div class="table-responsive">
+            {{ desc_html | safe }}
+          </div>
+        </div>
+      </div>
+
+      {% if plot_divs %}
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="card-title">Interactive Plots</h2>
+          {% for p in plot_divs %}
+          <div class="mb-4">
+            <h5 style="color: #2e5c8a; font-weight: 600;">{{ p.title }}</h5>
+            <div>{{ p.div | safe }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card">
+        <div class="card-body">
+          <h5 class="mb-3" style="color: #1f4788; font-weight: 700;">📥 Download Actions</h5>
+          <p class="small text-muted mb-3">Download your results in various formats or select specific columns</p>
+          
+          <!-- Download buttons -->
+          <div class="mb-4">
+            <strong class="d-block mb-3">Download Data:</strong>
+            <div class="d-flex gap-2 flex-wrap">
+              <a class="btn btn-outline-success btn-sm" href="{{ url_for('download_csv') }}" title="Download as CSV">
+                📥 CSV
+              </a>
+              <a class="btn btn-outline-success btn-sm" href="{{ url_for('download_excel') }}" title="Download as Excel">
+                📥 Excel
+              </a>
+              {% if pdf_available %}
+              <a class="btn btn-outline-info btn-sm" href="{{ url_for('download_pdf') }}" title="Download as PDF with report">
+                📄 PDF Report
+              </a>
+              {% else %}
+              <button class="btn btn-outline-secondary btn-sm" disabled title="Install reportlab to enable PDF export">
+                📄 PDF (install reportlab)
+              </button>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Column selector -->
+          <div class="mb-4">
+            <strong class="d-block mb-2">Select Columns to Download:</strong>
+            <div class="column-list" id="columnList">
+              <div class="text-muted small" style="padding: 2rem 1rem; text-align: center;">Loading columns...</div>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm mt-2" id="downloadSelected">
+              📥 Download Selected Columns (CSV)
+            </button>
+          </div>
+
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('index') }}">
+            📤 Upload another file
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Load columns on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        fetch('{{ url_for("get_columns") }}')
+          .then(r => r.json())
+          .then(data => {
+            const list = document.getElementById('columnList');
+            list.innerHTML = '';
+            if (data.columns.length === 0) {
+              list.innerHTML = '<div class="text-muted small" style="padding: 1rem; text-align: center;">No columns found</div>';
+              return;
+            }
+            data.columns.forEach((col, idx) => {
+              const div = document.createElement('div');
+              div.className = 'column-item form-check';
+              div.innerHTML = `
+                <input class="form-check-input column-check" type="checkbox" id="col${idx}" value="${col}" checked>
+                <label class="form-check-label" for="col${idx}">${col}</label>
+              `;
+              list.appendChild(div);
+            });
+          });
+      });
+
+      // Download selected columns as CSV
+      document.getElementById('downloadSelected').addEventListener('click', function() {
+        const selected = Array.from(document.querySelectorAll('.column-check:checked'))
+          .map(c => c.value);
+        if (selected.length === 0) {
+          alert('Please select at least one column');
+          return;
+        }
+        // In a real app, you'd POST to a new endpoint with selected columns
+        // For now, just download all
+        window.location.href = '{{ url_for("download_csv") }}';
+      });
+    </script>
+  </body>
+</html>

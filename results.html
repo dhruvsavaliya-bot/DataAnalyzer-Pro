@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataAnalyzer Pro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    
+</head>
+
+<body>
+  <!-- Mode Toggle Button -->
+  <button class="mode-toggle" id="modeToggle" title="Toggle Light/Dark Mode"></button>
+
+ 
+
+<!-- Mobile FAB: tap to open sidebar -->
+<button id="mobileSidebarOpen" class="mobile-fab" aria-label="Open menu">
+  <i class="bi bi-folder2-open"></i>
+</button>
+
+<div class="wrapper">
+<!-- Mobile sidebar overlay backdrop -->
+<div id="sidebarOverlay"></div>
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div class="sidebar-header">
+      <h3 id="sidebarTitle">DataAnalyzer Pro</h3>
+      <small>Analysis Dashboard</small>
+    </div>
+
+    <!-- Stats Card -->
+    <div class="stats-card">
+      <div class="stat-row">
+        <span class="stat-label">Total Files</span>
+        <span class="stat-value">{{ file_previews|length }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Total Rows</span>
+        <span class="stat-value">{{ file_previews|sum(attribute='rows') }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Total Columns</span>
+        <span class="stat-value">{{ file_previews|map(attribute='columns')|sum }}</span>
+      </div>
+    </div>
+
+    <!-- QUICK ACTIONS -->
+    <div class="section-title">QUICK ACTIONS</div>
+    <div class="action-buttons">
+      <a href="{{ url_for('index') }}" class="action-btn">
+        <i class="bi bi-upload"></i> Upload More Files
+      </a>
+      <a href="#" class="action-btn" id="quickDownloadCombined">
+        <i class="bi bi-download"></i> Download Combined
+      </a>
+      <a href="#" class="action-btn" id="quickGenerateChart">
+        <i class="bi bi-bar-chart"></i> Generate Chart
+      </a>
+      <a href="#" class="action-btn" id="quickCleanData">
+        <i class="bi bi-brush"></i> Clean Data
+      </a>
+    </div>
+
+    <!-- NAVIGATION -->
+    <div class="section-title">NAVIGATION</div>
+    <div class="nav-menu">
+      <a href="#filesSection" class="nav-item active" onclick="scrollToSection('filesSection')">
+        <i class="bi bi-files"></i> Uploaded Files
+      </a>
+      <a href="#chartBuilder" class="nav-item" onclick="scrollToSection('chartBuilder')">
+        <i class="bi bi-bar-chart"></i> Chart Builder
+      </a>
+      <a href="#downloadSection" class="nav-item" onclick="scrollToSection('downloadSection')">
+        <i class="bi bi-download"></i> Download Options
+      </a>
+      <a href="#columnDownloadSection" class="nav-item" onclick="scrollToSection('columnDownloadSection')">
+        <i class="bi bi-columns"></i> Column Download
+      </a>
+      <a href="#cleaningSection" class="nav-item" onclick="scrollToSection('cleaningSection')">
+        <i class="bi bi-brush"></i> Data Cleaning
+      </a>
+    </div>
+
+    <!-- FILES LIST -->
+    <div class="section-title">FILES ({{ file_previews|length }})</div>
+    <div class="file-list">
+      {% for file in file_previews %}
+      <div class="file-item">
+        <span class="file-name" title="{{ file.name }}">{{ file.name }}</span>
+        <span class="file-badge">{{ file.rows }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- EXPORT OPTIONS -->
+    <div class="section-title">EXPORT OPTIONS</div>
+    <div class="action-buttons">
+      <a href="{{ url_for('download_combined_csv') }}" class="action-btn">
+        <i class="bi bi-filetype-csv"></i> Combined CSV
+      </a>
+      <a href="{{ url_for('download_combined_excel') }}" class="action-btn">
+        <i class="bi bi-file-earmark-excel"></i> Combined Excel
+      </a>
+      {% if pdf_available %}
+      <a href="{{ url_for('download_combined_pdf') }}" class="action-btn">
+        <i class="bi bi-file-pdf"></i> Combined PDF
+      </a>
+      {% endif %}
+    </div>
+  </nav>
+    <!-- Page Content -->
+    <div id="content">
+      <!-- Back to top button (mobile friendly) -->
+      <button id="backToTop" class="btn btn-primary btn-sm position-fixed bottom-0 end-0 m-4" style="display:none; z-index:99;">
+        <i class="bi bi-arrow-up"></i>
+      </button>
+
+      {% if failed_uploads %}
+      <div class="alert alert-warning">
+        <strong>⚠️ Some files failed to upload:</strong>
+        <ul class="mb-0 mt-2">
+          {% for fail in failed_uploads %}
+          <li>{{ fail.name }}: {{ fail.error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <!-- Uploaded Files Section -->
+      <section id="filesSection" class="mb-4">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="card-title"><span id="openSidebarIcon" title="Open sidebar" style="cursor:pointer;">📁</span> Uploaded Files</h2>
+            <ul class="nav nav-tabs" id="fileTabs" role="tablist">
+              {% for file in file_previews %}
+              <li class="nav-item" role="presentation">
+                <button class="nav-link {% if loop.first %}active{% endif %}" id="tab-{{ file.id }}" data-bs-toggle="tab"
+                  data-bs-target="#content-{{ file.id }}" type="button" role="tab">
+                  {{ file.name }}
+                  <span class="badge bg-secondary ms-1">{{ file.rows }} rows</span>
+                </button>
+              </li>
+              {% endfor %}
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-comparison" data-bs-toggle="tab" data-bs-target="#content-comparison"
+                  type="button" role="tab">
+                  📊 Comparison
+                </button>
+              </li>
+            </ul>
+
+            <div class="tab-content mt-3" id="fileTabContent">
+              {% for file in file_previews %}
+              <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="content-{{ file.id }}"
+                role="tabpanel">
+                <h5>Preview (first 5 rows)</h5>
+                <div class="table-responsive">
+                  {{ file.preview | safe }}
+                </div>
+              </div>
+              {% endfor %}
+
+              <div class="tab-pane fade" id="content-comparison" role="tabpanel">
+                <div class="row">
+                  <div class="col-md-12">
+                    <h5>File Overview</h5>
+                    <table class="table table-sm">
+                      <thead>
+                        <tr>
+                          <th>File Name</th>
+                          <th>Rows</th>
+                          <th>Columns</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for file in file_previews %}
+                        <tr>
+                          <td>{{ file.name }}</td>
+                          <td>{{ file.rows }}</td>
+                          <td>{{ file.columns }}</td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Chart Builder Section -->
+      <section id="chartBuilder" class="mb-4">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="card-title">📊 Chart Builder</h2>
+
+            {% if file_previews|length == 1 %}
+            <!-- Single file banner -->
+            <div class="alert alert-info py-2 mb-3 d-flex align-items-center gap-2">
+              <span>📄</span>
+              <span>Analyzing: <strong>{{ file_previews[0].name }}</strong>
+                &nbsp;·&nbsp; {{ file_previews[0].rows }} rows &nbsp;·&nbsp; {{ file_previews[0].columns }} columns
+              </span>
+            </div>
+            {% endif %}
+
+            <!-- File checkboxes for multi-file comparison -->
+            {% if file_previews|length > 1 %}
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Files to include</label>
+              <div class="d-flex flex-wrap gap-2" id="fileCheckboxes">
+                {% for file in file_previews %}
+                <div class="form-check form-check-inline border rounded px-3 py-2 bg-light">
+                  <input class="form-check-input file-cb" type="checkbox" id="fcb_{{ file.id }}" value="{{ file.id }}" checked>
+                  <label class="form-check-label small fw-semibold" for="fcb_{{ file.id }}">
+                    {{ file.name }}
+                    <span class="badge bg-secondary ms-1">{{ file.rows }}r</span>
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+              <div class="mt-2 d-flex align-items-center gap-3">
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="comparisonMode">
+                  <label class="form-check-label small" for="comparisonMode">
+                    <strong>Comparison mode</strong> — overlay all selected files on one chart
+                  </label>
+                </div>
+                <small id="comparisonHint" class="text-muted"></small>
+              </div>
+            </div>
+            {% endif %}
+
+            <div class="row mb-3 g-2">
+              <div class="col-6 col-md-3">
+                <label class="form-label small">Chart Type</label>
+                <select id="chartType" class="form-select form-select-sm">
+                  <option value="bar">Bar</option>
+                  <option value="barh">Bar (horizontal)</option>
+                  <option value="pie">Pie</option>
+                  <option value="scatter">Scatter</option>
+                  <option value="hist">Histogram</option>
+                  <option value="line">Line</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-3">
+                <label class="form-label small">X / Category</label>
+                <select id="colX" class="form-select form-select-sm">
+                  <option value="">Select column...</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-3" id="yColWrap">
+                <label class="form-label small">Y / Value</label>
+                <select id="colY" class="form-select form-select-sm">
+                  <option value="">Select column...</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-3" id="histOptions" style="display:none;">
+                <label class="form-label small">Bins</label>
+                <input id="nbins" class="form-control form-control-sm" type="number" value="30" min="1">
+              </div>
+            </div>
+
+            <div id="chartHint" class="mb-2 small text-muted"></div>
+
+            <div class="d-flex gap-2 flex-wrap">
+              <button id="generateChart" class="btn btn-primary btn-sm">📊 Generate Chart</button>
+              <button id="saveChartImg" class="btn btn-outline-success btn-sm" style="display:none">💾 Save as
+                Image</button>
+              <button id="clearChart" class="btn btn-outline-secondary btn-sm">Clear</button>
+            </div>
+
+            <div class="mt-3" id="chartArea">
+              <div class="text-muted small text-center p-5">
+                Select chart options and click Generate Chart
+              </div>
+            </div>
+            <!-- Skeleton loader (hidden by default) -->
+            <div id="chartSkeleton" style="display:none; padding: 20px 0;">
+              <div class="skeleton skeleton-title mb-3"></div>
+              <div class="skeleton skeleton-chart"></div>
+              <div class="d-flex gap-2 mt-3">
+                <div class="skeleton skeleton-label"></div>
+                <div class="skeleton skeleton-label"></div>
+                <div class="skeleton skeleton-label"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Download Options Section -->
+      <section id="downloadSection" class="mb-4">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="mb-3" style="color: var(--primary-color); font-weight: 700;">📥 Download Options</h5>
+
+            <div class="row">
+              <!-- Individual file downloads -->
+              <div class="col-md-6">
+                <strong class="d-block mb-2">Individual Files:</strong>
+                <div class="list-group mb-3">
+                  {% for file in file_previews %}
+                  <div class="list-group-item download-file-item">
+                    <span class="download-file-name" title="{{ file.name }}">{{ file.name }}</span>
+                    <div class="download-btn-group">
+                      <a href="{{ url_for('download_csv', file_id=file.id) }}" class="btn btn-outline-success btn-sm">CSV</a>
+                      <a href="{{ url_for('download_excel', file_id=file.id) }}" class="btn btn-outline-success btn-sm">Excel</a>
+                      {% if pdf_available %}
+                      <a href="{{ url_for('download_pdf', file_id=file.id) }}" class="btn btn-outline-info btn-sm">PDF</a>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <!-- Combined downloads -->
+              <div class="col-md-6">
+                <strong class="d-block mb-2">Combined Downloads:</strong>
+                <div class="d-grid gap-2">
+                  <a href="{{ url_for('download_combined_csv') }}" class="btn btn-outline-primary btn-sm">
+                    📥 Combined CSV (with source column)
+                  </a>
+                  <a href="{{ url_for('download_combined_excel') }}" class="btn btn-outline-primary btn-sm">
+                    📥 Combined Excel (multiple sheets)
+                  </a>
+                  {% if pdf_available %}
+                  <a href="{{ url_for('download_combined_pdf') }}" class="btn btn-outline-info btn-sm">
+                    📄 Combined PDF Report
+                  </a>
+                  {% endif %}
+                </div>
+
+                <hr>
+
+                <strong class="d-block mb-2">Quick Stats:</strong>
+                <ul class="list-unstyled small">
+                  <li>Total Files: {{ file_previews|length }}</li>
+                  <li>Total Rows: {{ file_previews|sum(attribute='rows') }}</li>
+                  <li>Total Columns (combined): {{ file_previews|map(attribute='columns')|sum }}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Download Selected Columns Section -->
+      <section id="columnDownloadSection" class="mb-4">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="mb-1" style="color: var(--primary-color); font-weight: 700;">🗂️ Download Selected Columns</h5>
+            <p class="text-muted small mb-3">Pick a file and choose which columns to include in the download.</p>
+
+            <!-- File picker -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Select File</label>
+              <select id="colDownloadFileSelect" class="form-select form-select-sm" style="max-width: 320px;">
+                {% for file in file_previews %}
+                <option value="{{ file.id }}">{{ file.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Column checkboxes -->
+            <div class="mb-3">
+              <div class="d-flex align-items-center gap-3 mb-2">
+                <label class="form-label small fw-semibold mb-0">Select Columns</label>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="selectAllCols">All</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="deselectAllCols">None</button>
+                </div>
+              </div>
+              <div id="colCheckboxList" class="border rounded p-3 bg-light" style="max-height: 300px; overflow-y: auto;">
+                <div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Loading columns...</div>
+              </div>
+            </div>
+
+            <!-- Download buttons -->
+            <div class="d-flex gap-2 flex-wrap">
+              <button id="downloadSelectedCSV" class="btn btn-success btn-sm">
+                📥 Download as CSV
+              </button>
+              <button id="downloadSelectedExcel" class="btn btn-outline-success btn-sm">
+                📥 Download as Excel
+              </button>
+              {% if pdf_available %}
+              <button id="downloadSelectedPDF" class="btn btn-outline-info btn-sm">
+                📄 Download as PDF
+              </button>
+              {% else %}
+              <button class="btn btn-outline-secondary btn-sm" disabled title="Install reportlab to enable PDF export">
+                📄 PDF (install reportlab)
+              </button>
+              {% endif %}
+              <span id="colDownloadMsg" class="text-muted small align-self-center"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Data Cleaning Section -->
+      <section id="cleaningSection" class="mb-4">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="mb-1" style="color: var(--primary-color); font-weight: 700;">🧹 Data Cleaning</h5>
+            <p class="text-muted small mb-3">Clean your data before analyzing — remove duplicates and fill missing values.</p>
+
+            <!-- File picker -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Select File</label>
+              <select id="cleanFileSelect" class="form-select form-select-sm" style="max-width: 320px;">
+                {% for file in file_previews %}
+                <option value="{{ file.id }}">{{ file.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Stats bar -->
+            <div id="cleanStats" class="d-flex gap-3 flex-wrap mb-3">
+              <span class="clean-stat-badge" id="statRows"><span class="skeleton-inline"></span></span>
+              <span class="clean-stat-badge" id="statDuplicates"><span class="skeleton-inline"></span></span>
+              <span class="clean-stat-badge" id="statMissing"><span class="skeleton-inline"></span></span>
+            </div>
+
+            <!-- Missing col detail -->
+            <div id="missingDetail" class="mb-3" style="display:none">
+              <label class="form-label small fw-semibold">Missing values by column:</label>
+              <div id="missingCols" class="d-flex flex-wrap gap-2"></div>
+            </div>
+
+            <!-- Actions -->
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+              <button id="btnRemoveDuplicates" class="btn btn-outline-primary btn-sm">🗑️ Remove Duplicates</button>
+              <div class="d-flex align-items-center gap-2">
+                <select id="fillStrategy" class="form-select form-select-sm" style="width:auto">
+                  <option value="mean">Fill Missing → Mean</option>
+                  <option value="median">Fill Missing → Median</option>
+                  <option value="mode">Fill Missing → Mode</option>
+                  <option value="zero">Fill Missing → Zero</option>
+                  <option value="empty_string">Fill Missing → Empty</option>
+                </select>
+                <button id="btnFillMissing" class="btn btn-outline-warning btn-sm">✨ Apply</button>
+              </div>
+              <span id="cleanMsg" class="text-muted small align-self-center ms-1"></span>
+            </div>
+
+            <!-- Result preview -->
+            <div id="cleanPreview" class="mt-3" style="display:none">
+              <label class="form-label small fw-semibold">
+                Updated Preview (editable for missing values):
+              </label>
+              <div class="table-responsive">
+                <table class="table table-sm table-bordered" id="cleanPreviewTable"></table>
+              </div>
+            </div>
+            <div class="form-check form-switch ms-2">
+              <input class="form-check-input" type="checkbox" id="enableManualEdit">
+              <label class="form-check-label small fw-semibold">
+                ✏️ Enable manual edit for missing values
+              </label>
+            </div>
+
+            <button id="btnSaveEdits" class="btn btn-outline-success btn-sm" style="display:none">
+              💾 Save Edited Values
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  {% if plotly_available %}
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  {% endif %}
+
+  <!-- Pass file data to JavaScript - THIS IS CRITICAL -->
+  <script id="fileData" type="application/json">
+{
+  "files": {{ file_previews|tojson|safe }}
+}
+</script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // ── Mode Toggle ─────────────────────────────────────────────────────
+    const modeToggle = document.getElementById('modeToggle');
+    const body = document.body;
+    const savedMode = localStorage.getItem('theme');
+    if (savedMode === 'dark') body.classList.add('dark-mode');
+
+    modeToggle.addEventListener('click', () => {
+      body.classList.toggle('dark-mode');
+      localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
+    });
+
+    // ── Sidebar Toggle ─────────────────────────────────────────────────
+    const sidebar = document.getElementById('sidebar');
+    const content = document.getElementById('content');
+    const mobileFab = document.getElementById('mobileSidebarOpen');
+    const sidebarTitle = document.getElementById('sidebarTitle');
+    const overlay = document.getElementById('sidebarOverlay');
+
+    function isMobile() { return window.innerWidth <= 768; }
+
+    // Mobile: FAB opens sidebar
+    if (mobileFab) {
+      mobileFab.addEventListener('click', () => {
+        sidebar.classList.add('mobile-open');
+        overlay.classList.add('show');
+        mobileFab.style.display = 'none';
+      });
+    }
+
+    // ALL screens: clicking "DataAnalyzer Pro" toggles sidebar
+    if (sidebarTitle) {
+      sidebarTitle.addEventListener('click', () => {
+        if (isMobile()) {
+          // Mobile: slide out
+          sidebar.classList.remove('mobile-open');
+          overlay.classList.remove('show');
+          if (mobileFab) mobileFab.style.display = 'flex';
+        } else {
+          // Desktop: collapse/expand
+          sidebar.classList.toggle('active');
+          content.classList.toggle('active');
+          updateFolderIcon();
+        }
+      });
+    }
+
+    // Desktop: 📁 icon in "Uploaded Files" heading reopens sidebar
+    const openSidebarIcon = document.getElementById('openSidebarIcon');
+    function updateFolderIcon() {
+      if (!openSidebarIcon) return;
+      if (sidebar.classList.contains('active')) {
+        // Sidebar is now collapsed — pulse the icon as a hint
+        content.classList.add('sidebar-collapsed-hint');
+        setTimeout(() => content.classList.remove('sidebar-collapsed-hint'), 3500);
+      }
+    }
+    if (openSidebarIcon) {
+      openSidebarIcon.addEventListener('click', () => {
+        if (!isMobile() && sidebar.classList.contains('active')) {
+          sidebar.classList.remove('active');
+          content.classList.remove('active');
+          updateFolderIcon();
+        }
+      });
+    }
+
+    // Mobile: clicking overlay also closes sidebar
+    if (overlay) {
+      overlay.addEventListener('click', () => {
+        sidebar.classList.remove('mobile-open');
+        overlay.classList.remove('show');
+        if (mobileFab) mobileFab.style.display = 'flex';
+      });
+    }
+
+    // Handle resize between mobile/desktop
+    window.addEventListener('resize', () => {
+      if (isMobile()) {
+        sidebar.classList.remove('active');
+        content.classList.remove('active');
+      } else {
+        sidebar.classList.remove('mobile-open');
+        overlay.classList.remove('show');
+        if (mobileFab) mobileFab.style.display = 'none';
+      }
+    });
+
+    window.scrollToSection = function(sectionId) {
+      const element = document.getElementById(sectionId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+        
+        // Update active state in sidebar
+        document.querySelectorAll('#sidebar .nav-item').forEach(item => {
+          item.classList.remove('active');
+        });
+        const activeLink = document.querySelector(`#sidebar .nav-item[onclick*="${sectionId}"]`);
+        if (activeLink) activeLink.classList.add('active');
+        
+        // On mobile, close sidebar after clicking a nav item
+        if (isMobile()) {
+          sidebar.classList.remove('mobile-open');
+          const ov = document.getElementById('sidebarOverlay');
+          if (ov) ov.classList.remove('show');
+          if (mobileFab) mobileFab.style.display = 'flex';
+        }
+      }
+    };
+
+    // ── Back to Top Button ─────────────────────────────────────────────
+    const backToTop = document.getElementById('backToTop');
+    window.addEventListener('scroll', () => {
+      if (window.pageYOffset > 300) {
+        backToTop.style.display = 'block';
+      } else {
+        backToTop.style.display = 'none';
+      }
+    });
+    
+    backToTop.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // ── Quick Actions ──────────────────────────────────────────────────
+    document.getElementById('quickDownloadCombined')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.location.href = "{{ url_for('download_combined_csv') }}";
+    });
+
+    document.getElementById('quickGenerateChart')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      scrollToSection('chartBuilder');
+      // Highlight chart builder section
+      document.getElementById('chartBuilder').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('quickCleanData')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      scrollToSection('cleaningSection');
+    });
+
+    // ── Chart Builder Functions (keep all existing chart code) ─────────
+    let columnsCache = {};
+    let FILE_DATA = [];
+    let ALL_FILE_IDS = [];
+    let FILE_NAMES = {};
+    let SINGLE_FILE = false;
+
+    try {
+      const fileDataEl = document.getElementById('fileData');
+      if (fileDataEl && fileDataEl.textContent.trim()) {
+        const parsed = JSON.parse(fileDataEl.textContent);
+        FILE_DATA = parsed.files || [];
+      } else {
+        console.warn('File data element is empty or missing');
+        FILE_DATA = [];
+      }
+    } catch (e) {
+      console.error('Error parsing file data:', e);
+      FILE_DATA = [];
+    }
+
+    ALL_FILE_IDS = FILE_DATA.map(f => f.id);
+    FILE_NAMES = Object.fromEntries(FILE_DATA.map(f => [f.id, f.name]));
+    SINGLE_FILE = ALL_FILE_IDS.length === 1;
+
+    console.log('Loaded file data:', FILE_DATA);
+
+    // refreshColumns function
+    function refreshColumns() {
+      const selectedFiles = Array.from(document.querySelectorAll('.file-cb:checked')).map(cb => cb.value);
+      const comparisonMode = document.getElementById('comparisonMode')?.checked || false;
+      
+      if (selectedFiles.length === 0) {
+          document.getElementById('colX').innerHTML = '<option value="">Select column...</option>';
+          document.getElementById('colY').innerHTML = '<option value="">Select column...</option>';
+          return;
+      }
+      
+      const fileId = selectedFiles[0];
+      
+      fetch(`/columns/${fileId}`)
+          .then(r => r.json())
+          .then(data => {
+              const colX = document.getElementById('colX');
+              const colY = document.getElementById('colY');
+              
+              colX.innerHTML = '<option value="">Select column...</option>';
+              colY.innerHTML = '<option value="">Select column...</option>';
+              
+              data.columns.forEach(col => {
+                  const optionX = new Option(col.name, col.name);
+                  const optionY = new Option(col.name, col.name);
+                  colX.add(optionX);
+                  colY.add(optionY);
+              });
+          })
+          .catch(err => console.error('Error loading columns:', err));
+    }
+
+    // updateUIForChartType function
+    function updateUIForChartType() {
+      const chartType = document.getElementById('chartType').value;
+      const yColWrap = document.getElementById('yColWrap');
+      const histOptions = document.getElementById('histOptions');
+      const colY = document.getElementById('colY');
+      
+      if (chartType === 'hist' || chartType === 'pie') {
+        yColWrap.style.display = 'none';
+        colY.removeAttribute('required');
+      } else {
+        yColWrap.style.display = 'block';
+        colY.setAttribute('required', 'required');
+      }
+      
+      if (chartType === 'hist') {
+        histOptions.style.display = 'block';
+      } else {
+        histOptions.style.display = 'none';
+      }
+    }
+
+    // generateChartWithSkeleton function
+    function generateChartWithSkeleton() {
+      const chartArea = document.getElementById('chartArea');
+      const chartSkeleton = document.getElementById('chartSkeleton');
+      const selectedFiles = Array.from(document.querySelectorAll('.file-cb:checked')).map(cb => cb.value);
+      const comparisonMode = document.getElementById('comparisonMode')?.checked || false;
+      const chartType = document.getElementById('chartType').value;
+      const x = document.getElementById('colX').value;
+      const y = document.getElementById('colY').value;
+      const nbins = document.getElementById('nbins')?.value || 30;
+      
+      if (!x) {
+        alert('Please select an X column');
+        return;
+      }
+      
+      if (!['hist', 'pie'].includes(chartType) && !y) {
+        alert('Please select a Y column');
+        return;
+      }
+      
+      if (selectedFiles.length === 0) {
+        alert('Please select at least one file');
+        return;
+      }
+      
+      chartArea.style.display = 'none';
+      chartSkeleton.style.display = 'block';
+      
+      const requestData = {
+        type: chartType,
+        x: x,
+        y: y,
+        nbins: nbins,
+        comparison_mode: comparisonMode,
+        selected_files: selectedFiles
+      };
+      
+      fetch('/generate_chart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+      })
+      .then(async response => {
+        const text = await response.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error('Failed to parse JSON:', text.substring(0, 200));
+          throw new Error('Server returned invalid JSON');
+        }
+      })
+      .then(data => {
+        chartSkeleton.style.display = 'none';
+        chartArea.style.display = 'block';
+        
+        if (data.error) {
+          chartArea.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+          return;
+        }
+        
+        if (data.html) {
+          chartArea.innerHTML = data.html;
+          Array.from(chartArea.getElementsByTagName('script')).forEach(oldScript => {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach(attr => {
+              newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+          });
+        } else if (data.image) {
+          chartArea.innerHTML = `<img src="data:image/png;base64,${data.image}" class="img-fluid">`;
+        }
+      })
+      .catch(error => {
+        chartSkeleton.style.display = 'none';
+        chartArea.style.display = 'block';
+        chartArea.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function (e) {
+          const targetId = e.target.getAttribute('data-bs-target') || '';
+          if (targetId.includes('content-')) {
+            const fileId = targetId.replace('#content-', '');
+            if (fileId !== 'comparison') refreshColumns();
+          }
+        });
+      });
+
+      document.querySelectorAll('.file-cb').forEach(cb => {
+        cb.addEventListener('change', refreshColumns);
+      });
+
+      const cmpCb = document.getElementById('comparisonMode');
+      if (cmpCb) cmpCb.addEventListener('change', refreshColumns);
+
+      document.getElementById('chartType').addEventListener('change', updateUIForChartType);
+      document.getElementById('generateChart').addEventListener('click', generateChartWithSkeleton);
+      document.getElementById('clearChart').addEventListener('click', () => {
+        document.getElementById('chartArea').innerHTML = '<div class="text-muted small text-center p-5">Chart cleared</div>';
+        document.getElementById('chartArea').style.display = 'block';
+        document.getElementById('chartSkeleton').style.display = 'none';
+      });
+
+      refreshColumns();
+      updateUIForChartType();
+    });
+
+    // ── Data Cleaning Functions (keep all existing cleaning code) ─────
+    const cleanFileSelect = document.getElementById('cleanFileSelect');
+
+    function loadCleanStats(fileId) {
+      const statRows = document.getElementById('statRows');
+      const statDup = document.getElementById('statDuplicates');
+      const statMiss = document.getElementById('statMissing');
+      statRows.innerHTML = '<span class="skeleton-inline"></span>';
+      statDup.innerHTML = '<span class="skeleton-inline"></span>';
+      statMiss.innerHTML = '<span class="skeleton-inline"></span>';
+
+      fetch(`/clean/stats?file_id=${fileId}`)
+        .then(r => r.json())
+        .then(d => {
+          statRows.textContent = `📄 ${d.rows} rows`;
+          statDup.textContent = `🔁 ${d.duplicates} duplicates`;
+          statMiss.textContent = `❓ ${d.missing} missing`;
+          statDup.style.color = d.duplicates > 0 ? '#dc3545' : '#28a745';
+          statMiss.style.color = d.missing > 0 ? '#ffc107' : '#28a745';
+
+          const missingDetail = document.getElementById('missingDetail');
+          const missingCols = document.getElementById('missingCols');
+          if (d.missing > 0 && Object.keys(d.missing_by_col).length > 0) {
+            missingDetail.style.display = 'block';
+            missingCols.innerHTML = Object.entries(d.missing_by_col)
+              .map(([col, cnt]) => `<span class="badge bg-warning text-dark">${col}: ${cnt}</span>`)
+              .join('');
+          } else {
+            missingDetail.style.display = 'none';
+          }
+        })
+        .catch(() => {
+          statRows.textContent = '—';
+          statDup.textContent = '—';
+          statMiss.textContent = '—';
+        });
+    }
+
+    function showCleanMsg(msg, isError) {
+      const el = document.getElementById('cleanMsg');
+      el.textContent = msg;
+      el.style.color = isError ? '#dc3545' : '#28a745';
+      setTimeout(() => { el.textContent = ''; }, 4000);
+    }
+
+    function renderCleanPreview(data) {
+      if (!data.preview_rows || !data.columns_list) return;
+
+      const preview = document.getElementById('cleanPreview');
+      const table = document.getElementById('cleanPreviewTable');
+      const manualEdit = document.getElementById('enableManualEdit').checked;
+
+      preview.style.display = 'block';
+
+      let html = '<thead><tr>';
+      data.columns_list.forEach(c => html += `<th>${c}</th>`);
+      html += '</tr></thead><tbody>';
+
+      data.preview_rows.forEach((row, rIdx) => {
+        html += '<tr>';
+        row.forEach((cell, cIdx) => {
+          const isNull = cell === null || cell === '—' || cell === '';
+          if (isNull && manualEdit) {
+            html += `
+              <td>
+                <input type="text"
+                       class="form-control form-control-sm manual-cell"
+                       data-row="${rIdx}"
+                       data-col="${data.columns_list[cIdx]}"
+                       placeholder="NULL"
+                       value="">
+              </td>`;
+          } else {
+            const displayValue = cell === null || cell === '—' ? 'NULL' : cell;
+            html += `<td>${displayValue}</td>`;
+          }
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody>';
+      table.innerHTML = html;
+
+      const saveBtn = document.getElementById('btnSaveEdits');
+      if (saveBtn) {
+          saveBtn.style.display = manualEdit ? 'inline-flex' : 'none';
+      }
+      
+      if (manualEdit) {
+        document.querySelectorAll('.manual-cell').forEach(input => {
+          input.addEventListener('input', function() {
+            this.style.borderColor = 'var(--primary-color)';
+          });
+        });
+      }
+    }
+
+    function updateCleanStats(stats) {
+      const statRows = document.getElementById('statRows');
+      const statDup = document.getElementById('statDuplicates');
+      const statMiss = document.getElementById('statMissing');
+      
+      statRows.textContent = `📄 ${stats.rows} rows`;
+      statDup.textContent = `🔁 ${stats.duplicates} duplicates`;
+      statMiss.textContent = `❓ ${stats.missing} missing`;
+      statDup.style.color = stats.duplicates > 0 ? '#dc3545' : '#28a745';
+      statMiss.style.color = stats.missing > 0 ? '#ffc107' : '#28a745';
+
+      const missingDetail = document.getElementById('missingDetail');
+      const missingCols = document.getElementById('missingCols');
+      if (stats.missing > 0 && Object.keys(stats.missing_by_col).length > 0) {
+        missingDetail.style.display = 'block';
+        missingCols.innerHTML = Object.entries(stats.missing_by_col)
+          .map(([col, cnt]) => `<span class="badge bg-warning text-dark">${col}: ${cnt}</span>`)
+          .join('');
+      } else {
+        missingDetail.style.display = 'none';
+      }
+    }
+
+    if (cleanFileSelect) {
+      loadCleanStats(cleanFileSelect.value);
+      cleanFileSelect.addEventListener('change', () => {
+        loadCleanStats(cleanFileSelect.value);
+        document.getElementById('cleanPreview').style.display = 'none';
+      });
+    }
+
+    document.getElementById('btnRemoveDuplicates').addEventListener('click', function () {
+      const fileId = cleanFileSelect.value;
+      this.disabled = true;
+      this.textContent = 'Working...';
+      const self = this;
+      fetch('/clean/remove_duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fileId })
+      })
+        .then(r => r.json())
+        .then(d => {
+          self.disabled = false;
+          self.textContent = '🗑️ Remove Duplicates';
+          if (d.error) { showCleanMsg('Error: ' + d.error, true); return; }
+          showCleanMsg(d.message, false);
+          
+          if (d.stats) {
+            updateCleanStats(d.stats);
+          } else {
+            loadCleanStats(fileId);
+          }
+          renderCleanPreview(d);
+        })
+        .catch(err => {
+          self.disabled = false;
+          self.textContent = '🗑️ Remove Duplicates';
+          showCleanMsg('Error: ' + err.message, true);
+        });
+    });
+
+    document.getElementById('btnFillMissing').addEventListener('click', function () {
+      const fileId = cleanFileSelect.value;
+      const strategy = document.getElementById('fillStrategy').value;
+      this.disabled = true;
+      this.textContent = 'Working...';
+      const self = this;
+      fetch('/clean/fill_missing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fileId, strategy })
+      })
+        .then(r => r.json())
+        .then(d => {
+          self.disabled = false;
+          self.textContent = '✨ Apply';
+          if (d.error) { showCleanMsg('Error: ' + d.error, true); return; }
+          showCleanMsg(d.message, false);
+          
+          if (d.stats) {
+            updateCleanStats(d.stats);
+          } else {
+            loadCleanStats(fileId);
+          }
+          renderCleanPreview(d);
+        })
+        .catch(err => {
+          self.disabled = false;
+          self.textContent = '✨ Apply';
+          showCleanMsg('Error: ' + err.message, true);
+        });
+    });
+
+    document.getElementById('btnSaveEdits').addEventListener('click', () => {
+      const fileId = cleanFileSelect.value;
+      const edits = [];
+
+      document.querySelectorAll('.manual-cell').forEach(input => {
+        if (input.value.trim() !== '') {
+          edits.push({
+            row: parseInt(input.dataset.row),
+            column: input.dataset.col,
+            value: input.value
+          });
+        }
+      });
+
+      if (edits.length === 0) {
+        showCleanMsg('No values edited.', true);
+        return;
+      }
+
+      const saveBtn = document.getElementById('btnSaveEdits');
+      const originalText = saveBtn.textContent;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+
+      fetch('/clean/manual_edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fileId, edits })
+      })
+      .then(async r => {
+        const text = await r.text();
+        console.log("SERVER RESPONSE:", text);
+        return JSON.parse(text);
+      })
+      .then(d => {
+        if (d.error) {
+          showCleanMsg(d.error, true);
+          return;
+        }
+        
+        showCleanMsg('Values updated successfully.', false);
+        
+        renderCleanPreview(d);
+        
+        if (d.stats) {
+          updateCleanStats(d.stats);
+        } else {
+          loadCleanStats(fileId);
+        }
+        
+        if (colDownloadFileSelect && colDownloadFileSelect.value === fileId) {
+          loadColumnsForDownload(fileId);
+        }
+      })
+      .catch(err => {
+        showCleanMsg(err.message, true);
+      })
+      .finally(() => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalText;
+      });
+    });
+
+    document.getElementById('enableManualEdit').addEventListener('change', () => {
+      document.getElementById('cleanPreview').style.display = 'none';
+    });
+
+    // ── Download Selected Columns Functions ───────────────────────────
+    const colDownloadFileSelect = document.getElementById('colDownloadFileSelect');
+    const colCheckboxList = document.getElementById('colCheckboxList');
+    const selectAllBtn = document.getElementById('selectAllCols');
+    const deselectAllBtn = document.getElementById('deselectAllCols');
+    const downloadSelectedCSV = document.getElementById('downloadSelectedCSV');
+    const downloadSelectedExcel = document.getElementById('downloadSelectedExcel');
+    const downloadSelectedPDF = document.getElementById('downloadSelectedPDF');
+    const colDownloadMsg = document.getElementById('colDownloadMsg');
+
+    function loadColumnsForDownload(fileId) {
+        if (!fileId) return;
+        
+        colCheckboxList.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Loading columns...</div>';
+        
+        fetch(`/columns/${fileId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data.columns || data.columns.length === 0) {
+                    colCheckboxList.innerHTML = '<div class="text-muted text-center p-3">No columns found</div>';
+                    return;
+                }
+                
+                let html = '<div class="column-grid">';
+                data.columns.forEach(col => {
+                    const typeClass = col.is_numeric ? 'type-numeric' : 
+                                     (col.is_datetime ? 'type-date' : 
+                                     (col.is_categorical ? 'type-category' : 'type-text'));
+                    
+                    html += `
+                        <div class="column-item">
+                            <div class="form-check">
+                                <input class="form-check-input column-check" 
+                                       type="checkbox" 
+                                       value="${col.name}" 
+                                       id="col_${col.name.replace(/\s+/g, '_')}" 
+                                       checked>
+                                <label class="form-check-label" for="col_${col.name.replace(/\s+/g, '_')}">
+                                    <span class="column-name">${col.name}</span>
+                                    <span class="type-badge ${typeClass}">
+                                        ${col.is_numeric ? '123' : (col.is_datetime ? '📅' : (col.is_categorical ? '🏷️' : '📝'))}
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                colCheckboxList.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading columns:', error);
+                colCheckboxList.innerHTML = '<div class="text-danger text-center p-3">Error loading columns</div>';
+            });
+    }
+
+    if (colDownloadFileSelect) {
+        loadColumnsForDownload(colDownloadFileSelect.value);
+        
+        colDownloadFileSelect.addEventListener('change', function() {
+            loadColumnsForDownload(this.value);
+        });
+    }
+
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function() {
+            document.querySelectorAll('.column-check').forEach(cb => cb.checked = true);
+        });
+    }
+
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function() {
+            document.querySelectorAll('.column-check').forEach(cb => cb.checked = false);
+        });
+    }
+
+    function getSelectedColumns() {
+        return Array.from(document.querySelectorAll('.column-check:checked')).map(cb => cb.value);
+    }
+
+    function downloadWithCurrentData(format) {
+      const fileId = colDownloadFileSelect.value;
+      const columns = getSelectedColumns();
+      
+      if (columns.length === 0) {
+        colDownloadMsg.textContent = 'Please select at least one column';
+        colDownloadMsg.style.color = '#dc3545';
+        setTimeout(() => { colDownloadMsg.textContent = ''; }, 3000);
+        return;
+      }
+      
+      colDownloadMsg.textContent = `Preparing ${format.toUpperCase()} download...`;
+      colDownloadMsg.style.color = 'var(--primary-color)';
+      
+      const params = new URLSearchParams();
+      params.append('file_id', fileId);
+      params.append('format', format);
+      columns.forEach(col => params.append('columns', col));
+      params.append('_', Date.now());
+      
+      window.location.href = `/download_selected_columns?${params.toString()}`;
+      
+      setTimeout(() => { colDownloadMsg.textContent = ''; }, 3000);
+    }
+
+    if (downloadSelectedCSV) {
+      downloadSelectedCSV.addEventListener('click', () => downloadWithCurrentData('csv'));
+    }
+
+    if (downloadSelectedExcel) {
+      downloadSelectedExcel.addEventListener('click', () => downloadWithCurrentData('excel'));
+    }
+
+    if (downloadSelectedPDF) {
+      downloadSelectedPDF.addEventListener('click', () => downloadWithCurrentData('pdf'));
+    }
+  </script>
+</body>
+
+</html>
